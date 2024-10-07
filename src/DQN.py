@@ -53,7 +53,11 @@ class DQN:
         s, a, r, s_prime, terminated = map(lambda x: x.to(self.device), self.buffer.sample(self.batch_size))
 
         next_q = self.target_network(s_prime).detach()
-        td_target = r + (1. - terminated) * self.gamma * next_q.max(dim=1, keepdim=True).values
+
+        ###############  Write Code #################
+        td_target = r + (1. - terminated) *
+        #############################################
+
         loss = F.mse_loss(self.network(s).gather(1, a.long()), td_target)
         self.optimizer.zero_grad()
         loss.backward()
@@ -92,11 +96,14 @@ class ReplayBuffer:
         self.max_size = max_size
 
     def update(self, s, a, r, s_prime, terminated):
-        self.s[self.ptr] = s
-        self.a[self.ptr] = a
-        self.r[self.ptr] = r
-        self.s_prime[self.ptr] = s_prime
+
+        ############### Write Code ##########################
+        self.s[self.ptr] =
+        self.a[self.ptr] =
+        self.r[self.ptr] =
+        self.s_prime[self.ptr] =
         self.terminated[self.ptr] = terminated
+        ######################################################
 
         self.ptr = (self.ptr + 1) % self.max_size
         self.size = min(self.size + 1, self.max_size)
