@@ -4,19 +4,25 @@ import torch.nn as nn
 import torch.nn.functional as F
 from src.CNN import CNNActionValue
 
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from src.CNN import CNNActionValue
+
 class DQN:
     def __init__(
             self,
             state_dim,
             action_dim,
-            lr=0.00025,
+            lr=0.00001,
             epsilon=1.0,
             epsilon_min=0.1,
             gamma=0.99,
             batch_size=32,
-            warmup_steps=5000,
+            warmup_steps=1000,
             buffer_size=int(1e5),
-            target_update_interval=10000,
+            target_update_interval=5000,
     ):
         self.action_dim = action_dim
         self.epsilon = epsilon
@@ -25,15 +31,13 @@ class DQN:
         self.warmup_steps = warmup_steps
         self.target_update_interval = target_update_interval
 
-        self.network = CNNActionValue(state_dim[0], action_dim)
-        self.target_network = CNNActionValue(state_dim[0], action_dim)
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.network = CNNActionValue(state_dim[0], action_dim).to(self.device)
+        self.target_network = CNNActionValue(state_dim[0], action_dim).to(self.device)
         self.target_network.load_state_dict(self.network.state_dict())
-        self.optimizer = torch.optim.RMSprop(self.network.parameters(), lr)
-
-        self.buffer = ReplayBuffer(state_dim, (1,), buffer_size)
-        self.device = torch.device('cuda' if torch.cuda.is_available else 'cpu')
-        self.network.to(self.device)
-        self.target_network.to(self.device)
+        # self.optimizer = torch.optim.RMSprop(self.network.parameters(), lr)
+        self.optimizer = torch.optim.Adam(self.network.parameters(), lr)
+        self.buffer = ReplayBuffer(state_dim, (1,), buffer_size, self.device)
 
         self.total_steps = 0
         self.epsilon_decay = (epsilon - epsilon_min) / 1e6
@@ -50,13 +54,10 @@ class DQN:
         return a
 
     def learn(self):
-        s, a, r, s_prime, terminated = map(lambda x: x.to(self.device), self.buffer.sample(self.batch_size))
+        s, a, r, s_prime, terminated = self.buffer.sample(self.batch_size)
 
         next_q = self.target_network(s_prime).detach()
-
-        ###############  Write Code #################
-        td_target = r + (1. - terminated) *
-        #############################################
+        td_target = r + (1. - terminated) * self.gamma * next_q.max(1, keepdim=True)[0]
 
         loss = F.mse_loss(self.network(s).gather(1, a.long()), td_target)
         self.optimizer.zero_grad()
@@ -79,41 +80,39 @@ class DQN:
 
         if self.total_steps % self.target_update_interval == 0:
             self.target_network.load_state_dict(self.network.state_dict())
-        self.epsilon -= self.epsilon_decay
+        self.epsilon = max(self.epsilon - self.epsilon_decay, 0.1)
         return result
 
 
 class ReplayBuffer:
-    def __init__(self, state_dim, action_dim, max_size=int(1e5)):
-        self.s = np.zeros((max_size, *state_dim), dtype=np.float32)
-        self.a = np.zeros((max_size, *action_dim), dtype=np.int64)
-        self.r = np.zeros((max_size, 1), dtype=np.float32)
-        self.s_prime = np.zeros((max_size, *state_dim), dtype=np.float32)
-        self.terminated = np.zeros((max_size, 1), dtype=np.float32)
+    def __init__(self, state_dim, action_dim, max_size=int(1e5), device='cpu'):
+        self.device = device
+        self.s = torch.zeros((max_size, *state_dim), dtype=torch.float32, device=device)
+        self.a = torch.zeros((max_size, *action_dim), dtype=torch.int64, device=device)
+        self.r = torch.zeros((max_size, 1), dtype=torch.float32, device=device)
+        self.s_prime = torch.zeros((max_size, *state_dim), dtype=torch.float32, device=device)
+        self.terminated = torch.zeros((max_size, 1), dtype=torch.float32, device=device)
 
         self.ptr = 0
         self.size = 0
         self.max_size = max_size
 
     def update(self, s, a, r, s_prime, terminated):
-
-        ############### Write Code ##########################
-        self.s[self.ptr] =
-        self.a[self.ptr] =
-        self.r[self.ptr] =
-        self.s_prime[self.ptr] =
-        self.terminated[self.ptr] = terminated
-        ######################################################
+        self.s[self.ptr] = torch.as_tensor(s, device=self.device)
+        self.a[self.ptr] = torch.as_tensor(a, device=self.device)
+        self.r[self.ptr] = torch.as_tensor(r, device=self.device)
+        self.s_prime[self.ptr] = torch.as_tensor(s_prime, device=self.device)
+        self.terminated[self.ptr] = torch.as_tensor(terminated, device=self.device)
 
         self.ptr = (self.ptr + 1) % self.max_size
         self.size = min(self.size + 1, self.max_size)
 
     def sample(self, batch_size):
-        ind = np.random.randint(0, self.size, batch_size)
+        ind = torch.randint(0, self.size, (batch_size,), device=self.device)
         return (
-            torch.FloatTensor(self.s[ind]),
-            torch.FloatTensor(self.a[ind]),
-            torch.FloatTensor(self.r[ind]),
-            torch.FloatTensor(self.s_prime[ind]),
-            torch.FloatTensor(self.terminated[ind]),
+            self.s[ind],
+            self.a[ind],
+            self.r[ind],
+            self.s_prime[ind],
+            self.terminated[ind],
         )
