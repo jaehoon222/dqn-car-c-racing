@@ -15,14 +15,14 @@ class DQN:
             self,
             state_dim,
             action_dim,
-            lr=0.00001,
+            lr=0.00025,
             epsilon=1.0,
             epsilon_min=0.1,
             gamma=0.99,
             batch_size=32,
-            warmup_steps=1000,
+            warmup_steps=20000,
             buffer_size=int(1e5),
-            target_update_interval=5000,
+            target_update_interval=10000,
     ):
         self.action_dim = action_dim
         self.epsilon = epsilon
